@@ -260,7 +260,6 @@ const CameraFeed = ({
              <div className="flex items-center gap-3">
                 <div className={`w-2.5 h-2.5 rounded-full ${resolvedStatus === 'online' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                 <span className="text-[10px] font-mono font-black text-white tracking-[0.2em] uppercase">{camera.name} • {camera.zone}</span>
-                {resolvedStatus === 'online' && <span className="px-2 py-0.5 rounded bg-rose-500 text-white text-[8px] font-black tracking-widest">LIVE</span>}
              </div>
           </div>
         </div>
@@ -342,18 +341,22 @@ interface CameraCardProps {
 
 function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewMode, onStreamStatusChange }: CameraCardProps) {
   const [streamFailed, setStreamFailed] = useState(false);
-  const [streamLive, setStreamLive] = useState(false);
+  const [streamState, setStreamState] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const canRenderStream = !!camera.ip_simulated && !camera.is_blocked && !streamFailed;
   const retryTimerRef = useRef<number | null>(null);
   const backendStatus: 'online' | 'offline' = camera.status === 'online' && !camera.is_blocked ? 'online' : 'offline';
-  const resolvedStatus = !camera.is_blocked && (streamLive || backendStatus === 'online') ? 'online' : 'offline';
+  const resolvedStatus: 'online' | 'offline' = camera.is_blocked
+    ? 'offline'
+    : streamState === 'unknown'
+      ? backendStatus
+      : streamState;
   const isListMode = viewMode === 'list';
   const [streamSrc, setStreamSrc] = useState(normalizeStreamUrl(camera.ip_simulated));
   const [triedVideoFallback, setTriedVideoFallback] = useState(false);
 
   useEffect(() => {
     setStreamFailed(false);
-    setStreamLive(false);
+    setStreamState('unknown');
     setStreamSrc(normalizeStreamUrl(camera.ip_simulated));
     setTriedVideoFallback(false);
     if (retryTimerRef.current) {
@@ -403,7 +406,7 @@ function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewM
                         }
                       }
                       setStreamFailed(true);
-                      setStreamLive(false);
+                      setStreamState('offline');
                       onStreamStatusChange('offline');
                       if (retryTimerRef.current) {
                         window.clearTimeout(retryTimerRef.current);
@@ -418,7 +421,7 @@ function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewM
                     }}
                     onLoad={() => {
                       setStreamFailed(false);
-                      setStreamLive(true);
+                      setStreamState('online');
                       onStreamStatusChange('online');
                     }}
                 />
@@ -429,9 +432,6 @@ function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewM
                            <span className="text-[9px] font-bold text-white uppercase tracking-widest font-mono">Stream Active: 12.4 Mbps</span>
                         </div>
                     </div>
-                </div>
-                <div className="absolute top-4 right-4 px-2 py-1 rounded bg-rose-500 text-white text-[9px] font-black tracking-widest">
-                  LIVE
                 </div>
                 </>
             ) : (
