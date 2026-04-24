@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../App';
 import { Camera } from '../types';
 import { 
@@ -39,6 +39,61 @@ const formatUptimeHHMMSS = (totalSeconds: number) => {
   const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
   const ss = String(sec % 60).padStart(2, '0');
   return `${hh}:${mm}:${ss}`;
+};
+
+const tokenizeSearch = (query: string) =>
+  query
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+const fuzzyIncludes = (value: string, needle: string) => {
+  if (!needle) return true;
+  let pos = 0;
+  const lower = value.toLowerCase();
+  for (const ch of needle.toLowerCase()) {
+    pos = lower.indexOf(ch, pos);
+    if (pos === -1) return false;
+    pos += 1;
+  }
+  return true;
+};
+
+const tokenMatchesValue = (value: string, token: string) => {
+  const normalizedValue = (value || '').toLowerCase();
+  if (!normalizedValue) return false;
+  return normalizedValue.includes(token) || fuzzyIncludes(normalizedValue, token);
+};
+
+const HighlightedText = ({
+  text,
+  tokens,
+  className = '',
+}: {
+  text: string;
+  tokens: string[];
+  className?: string;
+}) => {
+  if (!text) return <span className={className} />;
+  const highlightTokens = Array.from(new Set(tokens.map(t => t.trim()).filter(t => t.length > 1)));
+  if (highlightTokens.length === 0) return <span className={className}>{text}</span>;
+  const pattern = new RegExp(`(${highlightTokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'ig');
+  const parts = text.split(pattern);
+  return (
+    <span className={className}>
+      {parts.map((part, idx) => {
+        const shouldHighlight = highlightTokens.some(token => token.toLowerCase() === part.toLowerCase());
+        return shouldHighlight ? (
+          <mark key={`${part}-${idx}`} className="bg-blue-500/20 text-blue-400 px-0.5 rounded-sm">
+            {part}
+          </mark>
+        ) : (
+          <React.Fragment key={`${part}-${idx}`}>{part}</React.Fragment>
+        );
+      })}
+    </span>
+  );
 };
 
 // Camera Feed Component
@@ -330,6 +385,7 @@ const CameraFeed = ({
 
 interface CameraCardProps {
   camera: Camera;
+  searchTokens: string[];
   onClick: () => void | Promise<void>;
   onBlock: () => void | Promise<void>;
   onEdit: () => void | Promise<void>;
@@ -339,7 +395,7 @@ interface CameraCardProps {
   onStreamStatusChange: (status: 'online' | 'offline') => void;
 }
 
-function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewMode, onStreamStatusChange }: CameraCardProps) {
+function CameraCard({ camera, searchTokens, onClick, onBlock, onEdit, onDelete, isAdmin, viewMode, onStreamStatusChange }: CameraCardProps) {
   const [streamFailed, setStreamFailed] = useState(false);
   const [streamState, setStreamState] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const canRenderStream = !!camera.ip_simulated && !camera.is_blocked && !streamFailed;
@@ -380,7 +436,7 @@ function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewM
         {/* Status Badge */}
         <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10">
             <div className={`w-2 h-2 rounded-full ${resolvedStatus === 'online' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-            <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">{resolvedStatus}</span>
+            <HighlightedText text={resolvedStatus} tokens={searchTokens} className="text-[9px] font-black text-white uppercase tracking-[0.2em]" />
         </div>
 
         {/* Zone Badge */}
@@ -458,14 +514,16 @@ function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewM
         <div className="p-5 flex-grow flex flex-col min-w-0">
             <div className="flex justify-between items-start mb-4">
                 <div className="min-w-0 flex-1 pr-4">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-tight truncate group-hover:text-blue-500 transition-colors">{camera.name}</h3>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-tight truncate group-hover:text-blue-500 transition-colors">
+                      <HighlightedText text={camera.name} tokens={searchTokens} />
+                    </h3>
                     <div className="flex items-center gap-2 mt-1.5 opacity-60">
                         <Radio size={10} className="text-slate-400" />
-                        <span className="text-[9px] text-slate-400 font-mono tracking-widest">{camera.ip_simulated}</span>
+                        <HighlightedText text={camera.ip_simulated} tokens={searchTokens} className="text-[9px] text-slate-400 font-mono tracking-widest" />
                     </div>
                 </div>
                 <div className="p-2 rounded-lg bg-white/[0.03] border border-white/5">
-                   <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{camera.zone}</span>
+                   <HighlightedText text={camera.zone} tokens={searchTokens} className="text-[9px] font-black text-slate-500 uppercase tracking-widest" />
                 </div>
             </div>
 
@@ -532,12 +590,17 @@ function CameraCard({ camera, onClick, onBlock, onEdit, onDelete, isAdmin, viewM
 
 export default function Cameras() {
   const { token, user, socket } = useAuth();
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [zoneFilter, setZoneFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [quickStatus, setQuickStatus] = useState<'all' | 'online' | 'offline' | 'blocked'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(0);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<Camera | null>(null);
   const [streamErrors, setStreamErrors] = useState<Record<number, boolean>>({});
   const [liveStatus, setLiveStatus] = useState<Record<number, 'online' | 'offline'>>({});
@@ -557,6 +620,30 @@ export default function Cameras() {
   useEffect(() => {
     fetchCameras();
   }, [token]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('camera_recent_searches');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setRecentSearches(parsed.map(item => String(item)).filter(Boolean).slice(0, 6));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const closeDropdown = (event: MouseEvent) => {
+      if (!searchContainerRef.current) return;
+      if (!searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', closeDropdown);
+    return () => document.removeEventListener('mousedown', closeDropdown);
+  }, []);
 
   useEffect(() => {
     if (!socket) return;
@@ -810,21 +897,91 @@ export default function Cameras() {
     }
   };
 
+  const addRecentSearch = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setRecentSearches(prev => {
+      const next = [trimmed, ...prev.filter(item => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, 6);
+      window.localStorage.setItem('camera_recent_searches', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const searchTokens = useMemo(() => tokenizeSearch(search), [search]);
+
+  const suggestions = useMemo(() => {
+    const base = searchTokens.join(' ');
+    const nameSuggestions = cameras
+      .map(cam => cam.name)
+      .filter(Boolean)
+      .filter(name => tokenMatchesValue(name, base || ''))
+      .slice(0, 5);
+    const predefined = ['online', 'offline', 'blocked'].filter(item => tokenMatchesValue(item, base || ''));
+    const recents = recentSearches.filter(item => tokenMatchesValue(item, base || '')).slice(0, 3);
+    return Array.from(new Set([...nameSuggestions, ...predefined, ...recents])).slice(0, 8);
+  }, [cameras, recentSearches, searchTokens]);
+
+  useEffect(() => {
+    setActiveSuggestionIdx(0);
+  }, [suggestions.length, search]);
+
   const filteredCameras = cameras.filter(cam => {
-    const normalizedSearch = search.toLowerCase().trim();
     const currentStatus = liveStatus[cam.id] || cam.status;
+    const searchableFields = [
+      cam.name,
+      cam.zone,
+      cam.ip_simulated,
+      currentStatus,
+      cam.is_blocked ? 'blocked' : 'unblocked',
+      cam.is_blocked ? 'offline' : '',
+    ].filter(Boolean) as string[];
     const matchesSearch =
-      cam.name?.toLowerCase().includes(normalizedSearch) ||
-      cam.ip_simulated?.toLowerCase().includes(normalizedSearch);
+      searchTokens.length === 0 ||
+      searchTokens.every(token => searchableFields.some(field => tokenMatchesValue(field, token)));
     const matchesZone = zoneFilter === 'All' || cam.zone === zoneFilter;
     const matchesStatus =
       statusFilter === 'All' ||
       currentStatus === statusFilter.toLowerCase();
-    return matchesSearch && matchesZone && matchesStatus;
+    const matchesQuickStatus =
+      quickStatus === 'all' ||
+      (quickStatus === 'blocked' ? cam.is_blocked : currentStatus === quickStatus);
+    return matchesSearch && matchesZone && matchesStatus && matchesQuickStatus;
   });
 
   const zones = ['All', ...Array.from(new Set(cameras.map(c => c.zone)))];
   const statuses = ['All', 'Online', 'Offline', 'Maintenance'];
+
+  const applySearchValue = (value: string) => {
+    setSearch(value);
+    addRecentSearch(value);
+    setIsSearchFocused(false);
+  };
+
+  const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchFocused || suggestions.length === 0) {
+      if (event.key === 'Enter') addRecentSearch(search);
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveSuggestionIdx(prev => (prev + 1) % suggestions.length);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveSuggestionIdx(prev => (prev - 1 + suggestions.length) % suggestions.length);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applySearchValue(suggestions[activeSuggestionIdx] || search);
+      return;
+    }
+    if (event.key === 'Escape') {
+      setIsSearchFocused(false);
+    }
+  };
 
   useEffect(() => {
     const initial: Record<number, 'online' | 'offline'> = {};
@@ -952,15 +1109,62 @@ export default function Cameras() {
       {/* Advanced Filter Interface */}
       <div className="glass-card p-2 bg-white/[0.02] border-white/5">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-2">
-           <div className="xl:col-span-4 relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-500 transition-colors" size={16} />
+           <div className="xl:col-span-4 relative" ref={searchContainerRef}>
+              <div className="absolute left-3 inset-y-0 flex items-center justify-center pointer-events-none">
+                <Search className="text-slate-600 transition-colors" size={15} strokeWidth={2.25} />
+              </div>
               <input 
                 type="text" 
-                placeholder="Search node label, ip or mac index..." 
+                placeholder="Search cameras (name, zone, IP, status...)" 
                 value={search}
+                onFocus={() => setIsSearchFocused(true)}
+                onKeyDown={onSearchKeyDown}
                 onChange={(e) => setSearch(e.target.value)}
-                className="input-soc w-full pl-12 h-14 bg-transparent border-transparent focus:bg-white/[0.02] text-sm uppercase tracking-widest font-black placeholder:text-slate-700"
+                className="input-soc w-full pl-12 pr-12 h-14 bg-transparent border-transparent focus:bg-white/[0.02] text-sm uppercase tracking-widest font-black placeholder:text-slate-700"
               />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-3 inset-y-0 my-auto h-7 w-7 rounded-md border border-white/10 bg-black/30 text-slate-500 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
+                  aria-label="Clear search"
+                >
+                  <X size={14} strokeWidth={2.5} />
+                </button>
+              )}
+              {isSearchFocused && (
+                <div className="absolute z-30 mt-2 w-full rounded-xl bg-[#090b11] border border-white/10 shadow-2xl shadow-black/40 overflow-hidden">
+                  {search.trim().length === 0 && recentSearches.length > 0 && (
+                    <div className="px-3 py-2 border-b border-white/5">
+                      <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-2">Recent</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {recentSearches.map(item => (
+                          <button
+                            key={item}
+                            onClick={() => applySearchValue(item)}
+                            className="px-2 py-1 text-[10px] rounded-md bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                          >
+                            {item}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {suggestions.map((item, idx) => (
+                    <button
+                      key={`${item}-${idx}`}
+                      onClick={() => applySearchValue(item)}
+                      className={`w-full px-3 py-2 text-left text-[11px] font-mono tracking-wider transition-colors ${
+                        idx === activeSuggestionIdx ? 'bg-blue-500/15 text-blue-300' : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                  {suggestions.length === 0 && (
+                    <p className="px-3 py-3 text-[11px] text-slate-500">No suggestions</p>
+                  )}
+                </div>
+              )}
            </div>
            
            <div className="xl:col-span-8 flex flex-col md:flex-row items-center gap-2 p-2 px-4 border-t xl:border-t-0 xl:border-l border-white/5 bg-white/[0.01]">
@@ -1003,6 +1207,27 @@ export default function Cameras() {
                     ))}
                  </div>
               </div>
+
+              <div className="hidden xl:block w-px h-6 bg-white/5 mx-2" />
+              <div className="flex items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+                {[
+                  { label: 'Online', value: 'online' as const },
+                  { label: 'Offline', value: 'offline' as const },
+                  { label: 'Blocked', value: 'blocked' as const },
+                ].map(chip => (
+                  <button
+                    key={chip.value}
+                    onClick={() => setQuickStatus(prev => prev === chip.value ? 'all' : chip.value)}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                      quickStatus === chip.value
+                        ? 'bg-blue-600/15 text-blue-400 border-blue-500/30'
+                        : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
            </div>
         </div>
       </div>
@@ -1014,6 +1239,7 @@ export default function Cameras() {
             <motion.div key={camera.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <CameraCard 
                   camera={camera}
+                  searchTokens={searchTokens}
                   isAdmin={user?.role === 'admin'}
                   viewMode={viewMode}
                   onEdit={() => handleEditCamera(camera)}
@@ -1060,10 +1286,12 @@ export default function Cameras() {
       </div>
 
       {filteredCameras.length === 0 && (
-         <div className="flex flex-col items-center justify-center py-40 opacity-20 text-center">
-            <Radio size={80} className="mb-6 animate-pulse" />
-            <h3 className="text-xl font-black uppercase tracking-[0.5em]">No Cluster Response</h3>
-            <p className="text-xs uppercase tracking-widest mt-2">Modify filtration protocols to re-index node library</p>
+         <div className="glass-card p-10 md:p-16 text-center border-white/5 bg-white/[0.01]">
+            <Radio size={52} className="mx-auto mb-4 text-slate-700" />
+            <h3 className="text-lg font-black uppercase tracking-[0.25em] text-slate-300">No results found</h3>
+            <p className="text-[11px] uppercase tracking-widest mt-2 text-slate-500">
+              Try different keywords such as camera name, zone, IP, online/offline, or blocked.
+            </p>
          </div>
       )}
 
