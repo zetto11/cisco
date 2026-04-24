@@ -1106,129 +1106,131 @@ export default function Cameras() {
         </div>
       )}
 
-      {/* Advanced Filter Interface */}
-      <div className="glass-card p-2 bg-white/[0.02] border-white/5">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-2">
-           <div className="xl:col-span-4 relative" ref={searchContainerRef}>
-              <div className="absolute left-3 inset-y-0 flex items-center justify-center pointer-events-none">
-                <Search className="text-slate-600 transition-colors" size={15} strokeWidth={2.25} />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Search cameras (name, zone, IP, status...)" 
-                value={search}
-                onFocus={() => setIsSearchFocused(true)}
-                onKeyDown={onSearchKeyDown}
-                onChange={(e) => setSearch(e.target.value)}
-                className="input-soc w-full pl-12 pr-12 h-14 bg-transparent border-transparent focus:bg-white/[0.02] text-sm uppercase tracking-widest font-black placeholder:text-slate-700"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-3 inset-y-0 my-auto h-7 w-7 rounded-md border border-white/10 bg-black/30 text-slate-500 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
-                  aria-label="Clear search"
-                >
-                  <X size={14} strokeWidth={2.5} />
-                </button>
-              )}
-              {isSearchFocused && (
-                <div className="absolute z-30 mt-2 w-full rounded-xl bg-[#090b11] border border-white/10 shadow-2xl shadow-black/40 overflow-hidden">
-                  {search.trim().length === 0 && recentSearches.length > 0 && (
-                    <div className="px-3 py-2 border-b border-white/5">
-                      <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-2">Recent</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {recentSearches.map(item => (
-                          <button
-                            key={item}
-                            onClick={() => applySearchValue(item)}
-                            className="px-2 py-1 text-[10px] rounded-md bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
-                          >
-                            {item}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {suggestions.map((item, idx) => (
-                    <button
-                      key={`${item}-${idx}`}
-                      onClick={() => applySearchValue(item)}
-                      className={`w-full px-3 py-2 text-left text-[11px] font-mono tracking-wider transition-colors ${
-                        idx === activeSuggestionIdx ? 'bg-blue-500/15 text-blue-300' : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
-                      }`}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                  {suggestions.length === 0 && (
-                    <p className="px-3 py-3 text-[11px] text-slate-500">No suggestions</p>
-                  )}
+      {/* Search Bar */}
+      <div className="glass-card p-3 bg-white/[0.02] border-white/5">
+        <div className="relative" ref={searchContainerRef}>
+          <div className="absolute left-4 inset-y-0 flex items-center justify-center pointer-events-none">
+            <Search className="text-slate-500 transition-colors" size={16} strokeWidth={2.25} />
+          </div>
+          <input
+            type="text"
+            placeholder="Search cameras (name, zone, IP, status...)"
+            value={search}
+            onFocus={() => setIsSearchFocused(true)}
+            onKeyDown={onSearchKeyDown}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-soc w-full pl-14 pr-12 h-14 bg-transparent border-white/5 focus:border-blue-500/30 focus:bg-white/[0.02] text-sm uppercase tracking-widest font-black placeholder:text-slate-700"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 inset-y-0 my-auto h-7 w-7 rounded-md border border-white/10 bg-black/30 text-slate-500 hover:text-white hover:bg-white/10 transition-all flex items-center justify-center"
+              aria-label="Clear search"
+            >
+              <X size={14} strokeWidth={2.5} />
+            </button>
+          )}
+          {isSearchFocused && (
+            <div className="absolute z-30 mt-2 w-full rounded-xl bg-[#090b11] border border-white/10 shadow-2xl shadow-black/40 overflow-hidden">
+              {search.trim().length === 0 && recentSearches.length > 0 && (
+                <div className="px-3 py-2 border-b border-white/5">
+                  <p className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em] mb-2">Recent</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recentSearches.map(item => (
+                      <button
+                        key={item}
+                        onClick={() => applySearchValue(item)}
+                        className="px-2 py-1 text-[10px] rounded-md bg-white/[0.03] text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-           </div>
-           
-           <div className="xl:col-span-8 flex flex-col md:flex-row items-center gap-2 p-2 px-4 border-t xl:border-t-0 xl:border-l border-white/5 bg-white/[0.01]">
-              <div className="flex items-center gap-4 w-full md:w-auto">
-                 <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.4em] whitespace-nowrap">Tactical Sectors</span>
-                 <div className="flex flex-wrap gap-1">
-                    {zones.map(zone => (
-                      <button
-                        key={zone}
-                        onClick={() => setZoneFilter(zone)}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
-                          zoneFilter === zone 
-                            ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' 
-                            : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
-                        }`}
-                      >
-                        {zone}
-                      </button>
-                    ))}
-                 </div>
-              </div>
-              
-              <div className="hidden md:block w-px h-6 bg-white/5 mx-2" />
+              {suggestions.map((item, idx) => (
+                <button
+                  key={`${item}-${idx}`}
+                  onClick={() => applySearchValue(item)}
+                  className={`w-full px-3 py-2 text-left text-[11px] font-mono tracking-wider transition-colors ${
+                    idx === activeSuggestionIdx ? 'bg-blue-500/15 text-blue-300' : 'text-slate-400 hover:bg-white/[0.04] hover:text-white'
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+              {suggestions.length === 0 && (
+                <p className="px-3 py-3 text-[11px] text-slate-500">No suggestions</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
-              <div className="flex items-center gap-4 w-full md:w-auto">
-                 <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.4em] whitespace-nowrap">Sink Status</span>
-                 <div className="flex flex-wrap gap-1">
-                    {statuses.map(status => (
-                      <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
-                          statusFilter === status 
-                            ? 'bg-emerald-600/10 text-emerald-400 border-emerald-500/30' 
-                            : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
-                        }`}
-                      >
-                        {status}
-                      </button>
-                    ))}
-                 </div>
-              </div>
+      {/* Filter Bar */}
+      <div className="glass-card p-3 bg-white/[0.02] border-white/5">
+        <div className="flex flex-col xl:flex-row xl:items-center gap-4 xl:gap-6">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.4em] whitespace-nowrap">Tactical Sectors</span>
+            <div className="flex flex-wrap gap-1">
+              {zones.map(zone => (
+                <button
+                  key={zone}
+                  onClick={() => setZoneFilter(zone)}
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
+                    zoneFilter === zone
+                      ? 'bg-blue-600/10 text-blue-400 border-blue-500/30'
+                      : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
+                  }`}
+                >
+                  {zone}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              <div className="hidden xl:block w-px h-6 bg-white/5 mx-2" />
-              <div className="flex items-center gap-2 w-full md:w-auto justify-start md:justify-end">
-                {[
-                  { label: 'Online', value: 'online' as const },
-                  { label: 'Offline', value: 'offline' as const },
-                  { label: 'Blocked', value: 'blocked' as const },
-                ].map(chip => (
-                  <button
-                    key={chip.value}
-                    onClick={() => setQuickStatus(prev => prev === chip.value ? 'all' : chip.value)}
-                    className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
-                      quickStatus === chip.value
-                        ? 'bg-blue-600/15 text-blue-400 border-blue-500/30'
-                        : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
-                    }`}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
-           </div>
+          <div className="hidden xl:block w-px h-8 bg-white/5" />
+
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[9px] font-black text-slate-700 uppercase tracking-[0.4em] whitespace-nowrap">Sink Status</span>
+            <div className="flex flex-wrap gap-1">
+              {statuses.map(status => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
+                    statusFilter === status
+                      ? 'bg-emerald-600/10 text-emerald-400 border-emerald-500/30'
+                      : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="hidden xl:block w-px h-8 bg-white/5" />
+
+          <div className="flex items-center gap-2 flex-wrap xl:ml-auto">
+            {[
+              { label: 'Online', value: 'online' as const },
+              { label: 'Offline', value: 'offline' as const },
+              { label: 'Blocked', value: 'blocked' as const },
+            ].map(chip => (
+              <button
+                key={chip.value}
+                onClick={() => setQuickStatus(prev => prev === chip.value ? 'all' : chip.value)}
+                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                  quickStatus === chip.value
+                    ? 'bg-blue-600/15 text-blue-400 border-blue-500/30'
+                    : 'bg-transparent text-slate-600 border-transparent hover:bg-white/5 hover:text-slate-400'
+                }`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
